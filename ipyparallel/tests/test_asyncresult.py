@@ -239,7 +239,7 @@ class TestAsyncResult(ClusterTestCase):
         try:
             time.sleep(0.25)
             hr = rc2.get_result(ar.msg_ids)
-            assert hr.elapsed > 0.0, "got bad elapsed: %s" % hr.elapsed
+            assert hr.elapsed > 0.0, f"got bad elapsed: {hr.elapsed}"
             hr.get(1)
             assert (
                 hr.wall_time < ar.wall_time + 0.2
@@ -278,7 +278,7 @@ class TestAsyncResult(ClusterTestCase):
             ar.display_outputs()
         assert io.stderr == ''
         assert io.stdout.count('5555'), len(v) == io.stdout
-        assert not '\n\n' in io.stdout, io.stdout
+        assert '\n\n' not in io.stdout, io.stdout
         assert io.stdout.count('[stdout:'), len(v) == io.stdout
 
         ar = v.execute("a=5")
@@ -299,7 +299,7 @@ class TestAsyncResult(ClusterTestCase):
             ar.display_outputs('engine')
         assert io.stderr == ''
         assert io.stdout.count('5555'), len(v) == io.stdout
-        assert not '\n\n' in io.stdout, io.stdout
+        assert '\n\n' not in io.stdout, io.stdout
         assert io.stdout.count('[stdout:'), len(v) == io.stdout
 
         ar = v.execute("a=5")
@@ -353,9 +353,9 @@ class TestAsyncResult(ClusterTestCase):
 
         ar.get(5)
         assert 4 in found
-        assert len(found) > 1, (
-            "should have seen data multiple times, but got: %s" % found
-        )
+        assert (
+            len(found) > 1
+        ), f"should have seen data multiple times, but got: {found}"
 
     def test_not_single_result(self):
         save_build = self.client._build_targets

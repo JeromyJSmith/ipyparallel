@@ -32,7 +32,7 @@ class TaskDBTest:
         # sleep 1/10 s, to ensure timestamp is different to previous calls
         time.sleep(0.01)
         msg_ids = []
-        for i in range(n):
+        for _ in range(n):
             msg = self.session.msg('apply_request', content=dict(a=5))
             msg['buffers'] = [os.urandom(buffer_size)]
             rec = init_record(msg)
@@ -177,7 +177,7 @@ class TaskDBTest:
         rec['header']['msg_id'] = 'fubar'
         rec2 = self.db.get_record(msg_id)
         assert 'buffers' in rec2
-        assert not 'garbage' in rec2
+        assert 'garbage' not in rec2
         assert rec2['header']['msg_id'] == msg_id
 
     def test_pop_safe_find(self):
@@ -189,7 +189,7 @@ class TaskDBTest:
         rec['header']['msg_id'] = 'fubar'
         rec2 = self.db.find_records({'msg_id': msg_id})[0]
         assert 'buffers' in rec2
-        assert not 'garbage' in rec2
+        assert 'garbage' not in rec2
         assert rec2['header']['msg_id'] == msg_id
 
     def test_pop_safe_find_keys(self):
@@ -201,7 +201,7 @@ class TaskDBTest:
         rec['header']['msg_id'] = 'fubar'
         rec2 = self.db.find_records({'msg_id': msg_id})[0]
         assert 'buffers' in rec2
-        assert not 'garbage' in rec2
+        assert 'garbage' not in rec2
         assert rec2['header']['msg_id'] == msg_id
 
 
@@ -223,7 +223,7 @@ class TestDictBackend(TaskDBTest, TestCase):
         self.load_records(1)
         assert len(self.db.get_history()) == 17
 
-        for i in range(25):
+        for _ in range(25):
             self.load_records(1)
             assert len(self.db.get_history()) >= 17
             assert len(self.db.get_history()) <= 20

@@ -33,7 +33,7 @@ class IPythonParallelKernel(IPythonKernel):
 
     def _topic(self, topic):
         """prefixed topic for IOPub messages"""
-        base = "engine.%s" % self.engine_id
+        base = f"engine.{self.engine_id}"
 
         return f"{base}.{topic}".encode()
 
@@ -186,10 +186,10 @@ class IPythonParallelKernel(IPythonKernel):
 
             fname = getattr(f, '__name__', 'f')
 
-            fname = prefix + "f"
-            argname = prefix + "args"
-            kwargname = prefix + "kwargs"
-            resultname = prefix + "result"
+            fname = f"{prefix}f"
+            argname = f"{prefix}args"
+            kwargname = f"{prefix}kwargs"
+            resultname = f"{prefix}result"
 
             ns = {fname: f, argname: args, kwargname: kwargs, resultname: None}
             # print ns
@@ -257,12 +257,7 @@ class IPythonParallelKernel(IPythonKernel):
 
     def do_execute(self, *args, **kwargs):
         coro = self._do_execute_async(*args, **kwargs)
-        if ipykernel.version_info < (6,):
-            # ipykernel 5 uses gen.maybe_future which doesn't accept async def coroutines,
-            # but it does accept asyncio.Futures
-            return asyncio.ensure_future(coro)
-        else:
-            return coro
+        return asyncio.ensure_future(coro) if ipykernel.version_info < (6,) else coro
 
     # Control messages for msgspec extensions:
 

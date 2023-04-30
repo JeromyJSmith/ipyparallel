@@ -66,9 +66,10 @@ def _iscoroutinefunction(f):
     """
     if inspect.isgeneratorfunction(f):
         return True
-    if hasattr(inspect, 'iscoroutinefunction') and inspect.iscoroutinefunction(f):
-        return True
-    return False
+    return bool(
+        hasattr(inspect, 'iscoroutinefunction')
+        and inspect.iscoroutinefunction(f)
+    )
 
 
 def _asyncify(f):
@@ -261,15 +262,15 @@ class ParallelMagics(Magics):
         self.magics = dict(cell={}, line={})
         line_magics = self.magics['line']
 
-        px = 'px' + suffix
+        px = f'px{suffix}'
         if not suffix:
             # keep %result for legacy compatibility
             line_magics['result'] = self.result
 
-        line_magics['pxresult' + suffix] = self.result
+        line_magics[f'pxresult{suffix}'] = self.result
         line_magics[px] = self.px
-        line_magics['pxconfig' + suffix] = self.pxconfig
-        line_magics['auto' + px] = self.autopx
+        line_magics[f'pxconfig{suffix}'] = self.pxconfig
+        line_magics[f'auto{px}'] = self.autopx
 
         self.magics['cell'][px] = self.cell_px
 
@@ -277,17 +278,14 @@ class ParallelMagics(Magics):
 
     def _eval_target_str(self, ts):
         if ':' in ts:
-            targets = eval("self.view.client.ids[%s]" % ts)
+            return eval(f"self.view.client.ids[{ts}]")
         elif 'all' in ts:
-            targets = 'all'
+            return 'all'
         else:
-            targets = eval(ts)
-        return targets
+            return eval(ts)
 
     def _eval_signal_str(self, sig_str: str):
-        if sig_str.isdigit():
-            return int(sig_str)
-        return sig_str
+        return int(sig_str) if sig_str.isdigit() else sig_str
 
     @magic_arguments.magic_arguments()
     @exec_args
@@ -381,15 +379,15 @@ class ParallelMagics(Magics):
             else signal_on_interrupt
         )
 
-        base = "Parallel" if block else "Async parallel"
-
         targets = self.view.targets
         if isinstance(targets, list) and len(targets) > 10:
-            str_targets = str(targets[:4])[:-1] + ', ..., ' + str(targets[-4:])[1:]
+            str_targets = f'{str(targets[:4])[:-1]}, ..., {str(targets[-4:])[1:]}'
         else:
             str_targets = str(targets)
         if self.verbose:
-            print(base + " execution on engine(s): %s" % str_targets)
+            base = "Parallel" if block else "Async parallel"
+
+            print(f"{base} execution on engine(s): {str_targets}")
 
         result = self.view.execute(cell, silent=False, block=False)
         result._fname = "%px"
@@ -398,61 +396,58 @@ class ParallelMagics(Magics):
         if save_name:
             self.shell.user_ns[save_name] = result
 
-        if block:
-            try:
-                if progress_after is None:
-                    progress_after = self.progress_after_seconds
-
-                cm = result.stream_output() if stream_output else nullcontext()
-                with cm:
-                    finished_waiting = False
-                    if progress_after > 0:
-                        # finite progress-after timeout
-                        # wait for 'quick' results before showing progress
-                        tic = time.perf_counter()
-                        deadline = tic + progress_after
-                        result.wait(timeout=progress_after)
-                        remaining = max(deadline - time.perf_counter(), 0)
-                        result.wait_for_output(timeout=remaining)
-                        finished_waiting = result.done()
-
-                    if not finished_waiting:
-                        if progress_after >= 0:
-                            # not an immediate result, start interactive progress
-                            result.wait_interactive()
-                            result.wait_for_output(1)
-
-                    try:
-                        result.get()
-                    except error.CompositeError as e:
-                        if stream_output and result._output_ready:
-                            # already streamed, show an abbreviated result
-                            raise error.AlreadyDisplayedError(e) from None
-                        else:
-                            raise
-                # Skip redisplay if streaming output
-            except KeyboardInterrupt:
-                if signal_on_interrupt is not None:
-                    print(
-                        f"Received Keyboard Interrupt. Sending signal {signal_on_interrupt} to engines...",
-                        file=sys.stderr,
-                    )
-                    self.view.client.send_signal(
-                        signal_on_interrupt, targets=targets, block=True
-                    )
-                else:
-                    raise
-            finally:
-                # always redisplay outputs if not streaming,
-                # on both success and error
-
-                if not stream_output:
-                    # wait for at most 1 second for output to be complete
-                    result.wait_for_output(1)
-                    result.display_outputs(groupby)
-        else:
+        if not block:
             # return AsyncResult only on non-blocking submission
             return result
+        try:
+            if progress_after is None:
+                progress_after = self.progress_after_seconds
+
+            cm = result.stream_output() if stream_output else nullcontext()
+            with cm:
+                finished_waiting = False
+                if progress_after > 0:
+                    # finite progress-after timeout
+                    # wait for 'quick' results before showing progress
+                    tic = time.perf_counter()
+                    deadline = tic + progress_after
+                    result.wait(timeout=progress_after)
+                    remaining = max(deadline - time.perf_counter(), 0)
+                    result.wait_for_output(timeout=remaining)
+                    finished_waiting = result.done()
+
+                if not finished_waiting and progress_after >= 0:
+                    # not an immediate result, start interactive progress
+                    result.wait_interactive()
+                    result.wait_for_output(1)
+
+                try:
+                    result.get()
+                except error.CompositeError as e:
+                    if stream_output and result._output_ready:
+                        # already streamed, show an abbreviated result
+                        raise error.AlreadyDisplayedError(e) from None
+                    else:
+                        raise
+                    # Skip redisplay if streaming output
+        except KeyboardInterrupt:
+            if signal_on_interrupt is None:
+                raise
+            print(
+                f"Received Keyboard Interrupt. Sending signal {signal_on_interrupt} to engines...",
+                file=sys.stderr,
+            )
+            self.view.client.send_signal(
+                signal_on_interrupt, targets=targets, block=True
+            )
+        finally:
+            # always redisplay outputs if not streaming,
+            # on both success and error
+
+            if not stream_output:
+                # wait for at most 1 second for output to be complete
+                result.wait_for_output(1)
+                result.display_outputs(groupby)
 
     @magic_arguments.magic_arguments()
     @exec_args

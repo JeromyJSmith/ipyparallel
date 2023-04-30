@@ -508,7 +508,7 @@ class TestParallelMagics(ClusterTestCase):
                 except ipp.RemoteError:
                     pass
             assert 'Async' not in io.stdout
-            assert view.block == False
+            assert not view.block
 
     def cellpx_keyboard_interrupt_test_helper(self, sig=None):
         """%%px with Keyboard Interrupt on blocking execution"""

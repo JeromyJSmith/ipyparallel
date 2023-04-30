@@ -45,7 +45,7 @@ except AttributeError:
 
 async def test_cluster_id(Cluster):
     cluster_ids = set()
-    for i in range(3):
+    for _ in range(3):
         cluster = Cluster()
         cluster_ids.add(cluster.cluster_id)
     assert len(cluster_ids) == 3
@@ -168,7 +168,7 @@ async def test_restart_engines(Cluster):
         # wait for register
         rc.wait_for_engines(n, timeout=_timeout)
         after_pids = rc[:].apply_sync(os.getpid)
-        assert set(after_pids).intersection(before_pids) == set()
+        assert not set(after_pids).intersection(before_pids)
 
 
 async def test_get_output(Cluster):
@@ -371,7 +371,6 @@ def test_start_and_connect_activate(ipython, Cluster, activate):
             assert "px" in ipython.magics_manager.magics["cell"]
             px = ipython.magics_manager.magics["cell"]["px"]
             assert px.__self__.view.client is rc
-        else:
-            if "px" in ipython.magics_manager.magics["cell"]:
-                px = ipython.magics_manager.magics["cell"]["px"]
-                assert px.__self__.view.client is not rc
+        elif "px" in ipython.magics_manager.magics["cell"]:
+            px = ipython.magics_manager.magics["cell"]["px"]
+            assert px.__self__.view.client is not rc

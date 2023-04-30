@@ -53,7 +53,7 @@ class BroadcastScheduler(Scheduler):
         # assign targets to sub-schedulers based on binary path
         # compute binary '010110' representation of the engine id
         targets_by_scheduler = [
-            [] for i in range(len(self.connected_sub_scheduler_ids))
+            [] for _ in range(len(self.connected_sub_scheduler_ids))
         ]
         for target_tuple in targets:
             path = format(target_tuple[1] % trunc, fmt)
@@ -99,11 +99,7 @@ class BroadcastScheduler(Scheduler):
             new_msg = msg.copy()
             # begin rebuilding message
             # metadata['targets']
-            if self.is_leaf:
-                new_msg['metadata']['broadcast_targets'] = targets
-            else:
-                new_msg['metadata']['broadcast_targets'] = []
-
+            new_msg['metadata']['broadcast_targets'] = targets if self.is_leaf else []
             # avoid duplicated msg buffers
             buffers = []
             for sub_target, msg_buffers in replies.items():
@@ -158,9 +154,9 @@ class BroadcastScheduler(Scheduler):
                 f'broadcast::Invalid broadcast msg: {raw_msg}', exc_info=True
             )
             return
-        original_msg_id = msg['metadata']['original_msg_id']
         is_coalescing = msg['metadata']['is_coalescing']
         if is_coalescing:
+            original_msg_id = msg['metadata']['original_msg_id']
             self.coalescing_reply(
                 raw_msg, msg, original_msg_id, outgoing_id, idents[1:]
             )
