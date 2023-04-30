@@ -50,9 +50,7 @@ class TestLoadBalancedView(ClusterTestCase):
         def f(x, y):
             if y is None:
                 return y
-            if x is None:
-                return x
-            return x * y
+            return x if x is None else x * y
 
         data = list(range(10))
         data2 = list(range(4))
@@ -66,9 +64,7 @@ class TestLoadBalancedView(ClusterTestCase):
         def f(x, y):
             if y is None:
                 return y
-            if x is None:
-                return x
-            return x * y
+            return x if x is None else x * y
 
         data = list(range(4))
         data2 = list(range(10))
@@ -95,7 +91,7 @@ class TestLoadBalancedView(ClusterTestCase):
         assert isinstance(amr, ipp.AsyncMapResult)
         # check individual elements, retrieved as they come
         # list comprehension uses __iter__
-        astheycame = [r for r in amr]
+        astheycame = list(amr)
         # Ensure that at least one result came out of order:
         assert astheycame, reference != "should not have preserved order"
         assert sorted(astheycame, reverse=True) == reference, "result corrupted"
@@ -210,7 +206,7 @@ class TestLoadBalancedView(ClusterTestCase):
 
         assert len(results) == 3
         print(results)
-        assert all([r < 1 for r in results])
+        assert all(r < 1 for r in results)
 
         # wait
         self.client.wait(timeout=self.timeout)
@@ -291,7 +287,7 @@ class TestLoadBalancedView(ClusterTestCase):
         ar1.get()
         e1 = ar1.engine_id
         e2 = e1
-        while e2 == e1:
+        while e2 == e2:
             ar2 = view.apply_async(lambda: 1)
             ar2.get()
             e2 = ar2.engine_id
@@ -303,12 +299,10 @@ class TestLoadBalancedView(ClusterTestCase):
     def test_follow(self):
         ar = self.view.apply_async(lambda: 1)
         ar.get()
-        ars = []
         first_id = ar.engine_id
 
         self.view.follow = ar
-        for i in range(5):
-            ars.append(self.view.apply_async(lambda: 1))
+        ars = [self.view.apply_async(lambda: 1) for _ in range(5)]
         self.view.wait(ars)
         for ar in ars:
             assert ar.engine_id == first_id

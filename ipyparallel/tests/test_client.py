@@ -90,11 +90,11 @@ class TestClient(ClusterTestCase):
     def test_lbview_targets(self):
         """test load_balanced_view targets"""
         v = self.client.load_balanced_view()
-        assert v.targets == None
+        assert v.targets is None
         v = self.client.load_balanced_view(-1)
         assert v.targets == [self.client.ids[-1]]
         v = self.client.load_balanced_view('all')
-        assert v.targets == None
+        assert v.targets is None
 
     def test_dview_targets(self):
         """test direct_view targets"""
@@ -237,7 +237,7 @@ class TestClient(ClusterTestCase):
 
         self.client.shutdown(id0, block=True)
 
-        for i in range(150):
+        for _ in range(150):
             # give the engine 15 seconds to die
             if id0 not in self.client.ids:
                 break
@@ -255,16 +255,15 @@ class TestClient(ClusterTestCase):
         hub_n_before = len(self.client.hub_history())
         client_n_before = len(self.client.history)
 
-        for i in range(4):
+        for _ in range(4):
             self.client[:].apply_sync(lambda: 1)
         new_entries = len(self.client.history) - client_n_before
         hist = self.client.hub_history()
         for i in range(10):
-            if len(hist) < hub_n_before + new_entries:
-                time.sleep(0.5)
-                hist = self.client.hub_history()
-            else:
+            if len(hist) >= hub_n_before + new_entries:
                 break
+            time.sleep(0.5)
+            hist = self.client.hub_history()
         else:
             raise TimeoutError(
                 f"Timeout waiting for {new_entries} entries in the hub history"
@@ -344,10 +343,7 @@ class TestClient(ClusterTestCase):
     def test_hub_history(self):
         hist = self.client.hub_history()
         recs = self.client.db_query({'msg_id': {"$ne": ''}})
-        recdict = {}
-        for rec in recs:
-            recdict[rec['msg_id']] = rec
-
+        recdict = {rec['msg_id']: rec for rec in recs}
         latest = datetime(1984, 1, 1).replace(tzinfo=utc)
         for msg_id in hist:
             rec = recdict[msg_id]
@@ -371,19 +367,18 @@ class TestClient(ClusterTestCase):
         # timeout 5s, polling every 100ms
         msg_ids = set(rc.history)
         hub_hist = rc.hub_history()
-        for i in range(50):
-            if msg_ids.difference(hub_hist):
-                time.sleep(0.1)
-                hub_hist = rc.hub_history()
-            else:
+        for _ in range(50):
+            if not msg_ids.difference(hub_hist):
                 break
 
-        assert len(msg_ids.difference(hub_hist)) == 0
+            time.sleep(0.1)
+            hub_hist = rc.hub_history()
+        assert not msg_ids.difference(hub_hist)
 
         # step 2. wait for all requests to be done
         # timeout 5s, polling every 100ms
         qs = rc.queue_status()
-        for i in range(50):
+        for _ in range(50):
             if qs['unassigned'] or any(
                 qs[eid]['tasks'] + qs[eid]['queue'] for eid in qs if eid != 'unassigned'
             ):
@@ -421,7 +416,7 @@ class TestClient(ClusterTestCase):
         self._wait_for_idle()
         ars = [ar]
 
-        for i in range(10):
+        for _ in range(10):
             ar = ars[-1]
             ar2 = self.client.resubmit(ar.msg_ids)
 
@@ -492,7 +487,7 @@ class TestClient(ClusterTestCase):
 
     def test_purge_hub_results(self):
         # ensure there are some tasks
-        for i in range(5):
+        for _ in range(5):
             self.client[:].apply_sync(lambda: 1)
         # Wait for the Hub to realise the result is done:
         # This prevents a race condition, where we
@@ -547,7 +542,7 @@ class TestClient(ClusterTestCase):
 
     def test_purge_all_results(self):
         # ensure there are some tasks
-        for i in range(5):
+        for _ in range(5):
             self.client[:].apply_sync(lambda: 1)
         assert self.client.wait(timeout=10)
         self._wait_for_idle()
@@ -559,7 +554,7 @@ class TestClient(ClusterTestCase):
 
     def test_purge_everything(self):
         # ensure there are some tasks
-        for i in range(5):
+        for _ in range(5):
             self.client[:].apply_sync(lambda: 1)
         self.client.wait(timeout=10)
         self._wait_for_idle()
@@ -640,7 +635,7 @@ class TestClient(ClusterTestCase):
     def test_warning_on_hostname_match(self):
         location = socket.gethostname()
         with mock.patch('ipyparallel.client.client.is_local_ip', lambda x: False):
-            with mock.patch('socket.gethostname', lambda: location[0:-1]):
+            with mock.patch('socket.gethostname', lambda: location[:-1]):
                 with pytest.warns(RuntimeWarning):  # should trigger warning
                     c = self.connect_client()
                 c.close()
@@ -685,10 +680,7 @@ class TestClient(ClusterTestCase):
     )
     def test_signal_engines(self):
         view = self.client[:]
-        if sys.platform.startswith("win"):
-            signame = 'CTRL_C_EVENT'
-        else:
-            signame = 'SIGINT'
+        signame = 'CTRL_C_EVENT' if sys.platform.startswith("win") else 'SIGINT'
         signum = getattr(signal, signame)
         for sig in (signum, signame):
             ar = view.apply_async(time.sleep, 10)

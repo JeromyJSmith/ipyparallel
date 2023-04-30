@@ -115,8 +115,7 @@ class BaseLauncher(LoggingConfigurable):
             identifier = f"{identifier}-{self.cluster_id}"
         if getattr(self, 'engine_set_id', None):
             identifier = f"{identifier}-{self.engine_set_id}"
-        identifier = f"{identifier}-{os.getpid()}"
-        return identifier
+        return f"{identifier}-{os.getpid()}"
 
     loop = Instance(ioloop.IOLoop, allow_none=True)
 
@@ -132,11 +131,7 @@ class BaseLauncher(LoggingConfigurable):
 
     def to_dict(self):
         """Serialize a Launcher to a dict, for later restoration"""
-        d = {}
-        for attr in self.traits(to_dict=True):
-            d[attr] = getattr(self, attr)
-
-        return d
+        return {attr: getattr(self, attr) for attr in self.traits(to_dict=True)}
 
     @classmethod
     def from_dict(cls, d, *, config=None, parent=None, **kwargs):
@@ -221,17 +216,14 @@ class BaseLauncher(LoggingConfigurable):
         merges different sources for environment variables
         """
         env = {}
-        env.update(self.cluster_env)
+        env |= self.cluster_env
         env.update(self.environment)
         return env
 
     @property
     def running(self):
         """Am I running."""
-        if self.state == 'running':
-            return True
-        else:
-            return False
+        return self.state == 'running'
 
     async def start(self):
         """Start the process.
@@ -356,11 +348,7 @@ class ControllerLauncher(BaseLauncher):
         connection_files = self.connection_files
         paths = list(connection_files.values())
         start_time = time.monotonic()
-        if timeout >= 0:
-            deadline = start_time + timeout
-        else:
-            deadline = None
-
+        deadline = start_time + timeout if timeout >= 0 else None
         if not all(os.path.exists(f) for f in paths):
             self.log.debug(f"Waiting for {paths}")
         while not all(os.path.exists(f) for f in paths):
@@ -517,7 +505,7 @@ class LocalProcessLauncher(BaseLauncher):
         self.log.debug(f"Sending output for {self.identifier} to {self.output_file}")
 
         env = os.environ.copy()
-        env.update(self.get_env())
+        env |= self.get_env()
         self.log.debug(f"Setting environment: {','.join(self.get_env())}")
 
         with open(self.output_file, "ab") as f, open(os.devnull, "rb") as stdin:
@@ -548,10 +536,7 @@ class LocalProcessLauncher(BaseLauncher):
         """Stream one file"""
         with open(path) as f:
             while self.state == 'running' and not self._stop_waiting.is_set():
-                line = f.readline()
-                # log prefix?
-                # or stream directly to sys.stderr
-                if line:
+                if line := f.readline():
                     sys.stderr.write(line)
                 else:
                     # pause while we are at the end of the file
@@ -839,8 +824,7 @@ class MPILauncher(LocalProcessLauncher):
             'MPIExecControllerLauncher',
             'MPIExecEngineSetLauncher',
         ):
-            deprecated = config.get(oldname)
-            if deprecated:
+            if deprecated := config.get(oldname):
                 newname = oldname.replace('MPIExec', 'MPI')
                 config[newname].update(deprecated)
                 self.log.warning(
@@ -891,29 +875,22 @@ class MPILauncher(LocalProcessLauncher):
                 else:
                     in_mpi = True
             elif not in_mpi and line.startswith("-----"):
-                # openmpi has less clear boundaries;
-                # potentially several blocks that start and end with `----`
-                # and error messages can show up after one or more blocks
-                # once we see one of these lines, capture everything after it
-                # toggle on each such line
-                if not in_mpi:
-                    in_mpi = True
-                # this would let us only capture messages inside blocks
-                # but doing so would exclude most useful error output
-                # else:
-                #     # show the trailing delimiter line
-                #     mpiexec_lines.append(line)
-                #     in_mpi = False
-                #     continue
+                in_mpi = True
+                        # this would let us only capture messages inside blocks
+                        # but doing so would exclude most useful error output
+                        # else:
+                        #     # show the trailing delimiter line
+                        #     mpiexec_lines.append(line)
+                        #     in_mpi = False
+                        #     continue
 
             if in_mpi:
                 mpiexec_lines.append(line)
             elif after_mpi:
                 if mpi_tail <= 0:
                     break
-                else:
-                    mpi_tail -= 1
-                    mpiexec_lines.append(line)
+                mpi_tail -= 1
+                mpiexec_lines.append(line)
 
         if mpiexec_lines:
             self.log.warning("mpiexec error output:\n" + "".join(mpiexec_lines))
@@ -1082,14 +1059,11 @@ class SSHLauncher(LocalProcessLauncher):
 
     @observe('hostname')
     def _hostname_changed(self, change):
-        if self.user:
-            self.location = '{}@{}'.format(self.user, change['new'])
-        else:
-            self.location = change['new']
+        self.location = f"{self.user}@{change['new']}" if self.user else change['new']
 
     @observe('user')
     def _user_changed(self, change):
-        self.location = '{}@{}'.format(change['new'], self.hostname)
+        self.location = f"{change['new']}@{self.hostname}"
 
     def find_args(self):
         # not really used except in logging
@@ -1111,7 +1085,7 @@ class SSHLauncher(LocalProcessLauncher):
         return os.path.join(
             self.remote_profile_dir,
             'log',
-            os.path.basename(name) + f"-{time.time():.4f}.out",
+            f"{os.path.basename(name)}-{time.time():.4f}.out",
         )
 
     remote_profile_dir = Unicode(
@@ -1139,12 +1113,9 @@ class SSHLauncher(LocalProcessLauncher):
         """turns /home/you/.ipython/profile_foo into .ipython/profile_foo"""
         home = get_home_dir()
         if not home.endswith('/'):
-            home = home + '/'
+            home = f'{home}/'
 
-        if path.startswith(home):
-            return path[len(home) :]
-        else:
-            return path
+        return path[len(home) :] if path.startswith(home) else path
 
     @default("remote_profile_dir")
     def _remote_profile_dir_default(self):
@@ -1167,10 +1138,7 @@ class SSHLauncher(LocalProcessLauncher):
 
     def poll(self):
         """Override poll"""
-        if self.state == 'running':
-            return None
-        else:
-            return 0
+        return None if self.state == 'running' else 0
 
     def get_output(self, remove=False):
         """Retrieve engine output from the remote file"""
@@ -1209,12 +1177,11 @@ class SSHLauncher(LocalProcessLauncher):
     def _send_file(self, local, remote, wait=True):
         """send a single file"""
         full_remote = f"{self.location}:{remote}"
-        for i in range(10 if wait else 0):
-            if not os.path.exists(local):
-                self.log.debug("waiting for %s" % local)
-                time.sleep(1)
-            else:
+        for _ in range(10 if wait else 0):
+            if os.path.exists(local):
                 break
+            self.log.debug(f"waiting for {local}")
+            time.sleep(1)
         remote_dir = os.path.dirname(remote)
         self.log.info("ensuring remote %s:%s/ exists", self.location, remote_dir)
         check_output(
@@ -1237,7 +1204,7 @@ class SSHLauncher(LocalProcessLauncher):
         """fetch a single file"""
         full_remote = f"{self.location}:{remote}"
         self.log.info("fetching %s from %s", local, full_remote)
-        for i in range(10 if wait else 0):
+        for _ in range(10 if wait else 0):
             # wait up to 10s for remote file to exist
             check = check_output(
                 self.ssh_cmd
@@ -1504,7 +1471,7 @@ class SSHEngineSetLauncher(LocalEngineSetLauncher, SSHLauncher):
                 # pass all common traits to the launcher
                 kwargs = {attr: getattr(self, attr) for attr in inherited_traits}
                 # overrides from engine config
-                kwargs.update(overrides)
+                kwargs |= overrides
                 # explicit per-engine values
                 kwargs['parent'] = self
                 kwargs['identifier'] = key = f"{full_host}/{i}"
@@ -1616,7 +1583,7 @@ class WindowsHPCLauncher(BaseLauncher):
         if m is not None:
             job_id = m.group()
         else:
-            raise LauncherError("Job id couldn't be determined: %s" % output)
+            raise LauncherError(f"Job id couldn't be determined: {output}")
         self.job_id = job_id
         self.log.info('Job started with id: %r', job_id)
         return job_id
@@ -1624,14 +1591,8 @@ class WindowsHPCLauncher(BaseLauncher):
     def start(self, n):
         """Start n copies of the process using the Win HPC job scheduler."""
         self.write_job_file(n)
-        args = [
-            'submit',
-            '/jobfile:%s' % self.job_file,
-            '/scheduler:%s' % self.scheduler,
-        ]
-        self.log.debug(
-            "Starting Win HPC Job: {}".format(self.job_cmd + ' ' + ' '.join(args))
-        )
+        args = ['submit', f'/jobfile:{self.job_file}', f'/scheduler:{self.scheduler}']
+        self.log.debug(f"Starting Win HPC Job: {f'{self.job_cmd} ' + ' '.join(args)}")
 
         output = check_output(
             [self.job_cmd] + args, env=os.environ, cwd=self.work_dir, stderr=STDOUT
@@ -1642,10 +1603,8 @@ class WindowsHPCLauncher(BaseLauncher):
         return job_id
 
     def stop(self):
-        args = ['cancel', self.job_id, '/scheduler:%s' % self.scheduler]
-        self.log.info(
-            "Stopping Win HPC Job: {}".format(self.job_cmd + ' ' + ' '.join(args))
-        )
+        args = ['cancel', self.job_id, f'/scheduler:{self.scheduler}']
+        self.log.info(f"Stopping Win HPC Job: {f'{self.job_cmd} ' + ' '.join(args)}")
         try:
             output = check_output(
                 [self.job_cmd] + args, env=os.environ, cwd=self.work_dir, stderr=STDOUT
@@ -1691,7 +1650,7 @@ class WindowsHPCEngineSetLauncher(WindowsHPCLauncher):
     def write_job_file(self, n):
         job = IPEngineSetJob(parent=self)
 
-        for i in range(n):
+        for _ in range(n):
             t = IPEngineTask(parent=self)
             # The tasks work directory is *not* the actual work directory of
             # the engine. It is used as the base path for the stdout/stderr
@@ -1866,7 +1825,7 @@ class BatchSystemLauncher(BaseLauncher):
         if m is not None:
             job_id = m.group(self.job_id_regexp_group)
         else:
-            raise LauncherError("Job id couldn't be determined: %s" % output)
+            raise LauncherError(f"Job id couldn't be determined: {output}")
         self.job_id = job_id
         self.log.info('Job submitted with job id: %r', job_id)
         return job_id
@@ -1890,7 +1849,7 @@ class BatchSystemLauncher(BaseLauncher):
             self._insert_job_array_in_script()
         ns = {}
         # internally generated
-        ns.update(self.context)
+        ns |= self.context
         # from user config
         ns.update(self.namespace)
         script_as_string = self.formatter.format(self.batch_template, **ns)
@@ -1933,7 +1892,7 @@ class BatchSystemLauncher(BaseLauncher):
         self.write_batch_script(n)
 
         env = os.environ.copy()
-        env.update(self.get_env())
+        env |= self.get_env()
         output = check_output(self.args, env=env)
         output = output.decode("utf8", 'replace')
         self.log.debug(f"Submitted {shlex_join(self.args)}. Output: {output}")
@@ -1950,8 +1909,7 @@ class BatchSystemLauncher(BaseLauncher):
             ).decode("utf8", 'replace')
         except Exception:
             self.log.exception(
-                "Problem stopping cluster with command: %s"
-                % (self.delete_command + [self.job_id])
+                f"Problem stopping cluster with command: {self.delete_command + [self.job_id]}"
             )
             output = ""
 
@@ -2327,7 +2285,7 @@ class LSFEngineSetLauncher(LSFLauncher, BatchEngineSetLauncher):
         # write directly to output files
         # otherwise, will copy and clobber merged stdout/err
         env = {"LSB_STDOUT_DIRECT": "Y"}
-        env.update(super().get_env())
+        env |= super().get_env()
         return env
 
 

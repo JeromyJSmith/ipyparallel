@@ -106,7 +106,7 @@ class Cluster(AsyncFirst, LoggingConfigurable):
 
     @default("cluster_id")
     def _default_cluster_id(self):
-        return f"{int(time.time())}-{''.join(random.choice(_suffix_chars) for i in range(4))}"
+        return f"{int(time.time())}-{''.join(random.choice(_suffix_chars) for _ in range(4))}"
 
     profile_dir = Unicode(
         help="""The profile directory.
@@ -126,10 +126,7 @@ class Cluster(AsyncFirst, LoggingConfigurable):
 
     @validate("profile_dir")
     def _validate_profile_dir(self, proposal):
-        path = proposal.value
-        if path:
-            return os.path.abspath(path)
-        return path
+        return os.path.abspath(path) if (path := proposal.value) else path
 
     profile = Unicode(
         "",
@@ -325,10 +322,9 @@ class Cluster(AsyncFirst, LoggingConfigurable):
             parents.append(parent)
             parent = parent.parent
 
-        app_parents = list(
+        if app_parents := list(
             filter(lambda p: isinstance(p, BaseParallelApplication), parents)
-        )
-        if app_parents:
+        ):
             app_parent = app_parents[0]
         else:
             app_parent = None
@@ -366,17 +362,13 @@ class Cluster(AsyncFirst, LoggingConfigurable):
             return direct_config
         # priority ?! direct > profile
         config = Config()
-        if profile_config:
-            config.merge(profile_config)
+        config.merge(profile_config)
         config.merge(direct_config)
         return config
 
     @default("config")
     def _default_config(self):
-        if self.load_profile:
-            return self.profile_config
-        else:
-            return Config()
+        return self.profile_config if self.load_profile else Config()
 
     def __init__(self, *, engines=None, controller=None, **kwargs):
         """Construct a Cluster"""
@@ -417,7 +409,7 @@ class Cluster(AsyncFirst, LoggingConfigurable):
 
             if profile_dir.startswith(home_dir + os.path.sep):
                 # truncate $HOME/. -> ~/...
-                profile_dir = "~" + profile_dir[len(home_dir) :]
+                profile_dir = f"~{profile_dir[len(home_dir):]}"
             fields["profile_dir"] = repr(profile_dir)
 
         if self.controller:
@@ -498,8 +490,7 @@ class Cluster(AsyncFirst, LoggingConfigurable):
                 else:
                     self.controller.on_stop(self._controller_stopped)
 
-        engine_info = d.get("engines")
-        if engine_info:
+        if engine_info := d.get("engines"):
             self.engine_launcher_class = engine_info["class"]
             # after traitlet coercion, which imports strings
             cls = self.engine_launcher_class
@@ -577,9 +568,7 @@ class Cluster(AsyncFirst, LoggingConfigurable):
         """Return if we have any running components"""
         if self.controller and self.controller.state != 'after':
             return True
-        if any(es.state != 'after' for es in self.engines.values()):
-            return True
-        return False
+        return any((es.state != 'after' for es in self.engines.values()))
 
     def update_cluster_file(self):
         """Update my cluster file
@@ -641,9 +630,9 @@ class Cluster(AsyncFirst, LoggingConfigurable):
             add_args = controller_args.extend
 
         if self.controller_ip:
-            add_args(['--ip=%s' % self.controller_ip])
+            add_args([f'--ip={self.controller_ip}'])
         if self.controller_location:
-            add_args(['--location=%s' % self.controller_location])
+            add_args([f'--location={self.controller_location}'])
         if self.controller_args:
             add_args(self.controller_args)
 
@@ -984,16 +973,15 @@ class ClusterManager(LoggingConfigurable):
             if profile_dir is not None:
                 profile_dirs = [profile_dir]
             else:
-                if profiles is None:
-                    if profile is not None:
-                        profiles = [profile]
+                if profiles is None and profile is not None:
+                    profiles = [profile]
 
                 if profiles is not None:
                     profile_dirs = _locate_profiles(profiles)
 
-            if profile_dirs is None:
-                # totally unspecified, default to all
-                profile_dirs = _all_profile_dirs()
+        if profile_dirs is None:
+            # totally unspecified, default to all
+            profile_dirs = _all_profile_dirs()
 
         by_cluster_file = {c.cluster_file: c for c in self.clusters.values()}
         for profile_dir in profile_dirs:

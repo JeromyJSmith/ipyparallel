@@ -2,6 +2,7 @@
 """
 The IPython controller application.
 """
+
 # Copyright (c) IPython Development Team.
 # Distributed under the terms of the Modified BSD License.
 import json
@@ -99,7 +100,7 @@ ipcontroller --scheme=pure  # use the pure zeromq scheduler
 # The main application
 # -----------------------------------------------------------------------------
 flags = {}
-flags.update(base_flags)
+flags |= base_flags
 flags.update(
     {
         'usethreads': (
@@ -154,7 +155,7 @@ aliases = dict(
     scheme='TaskScheduler.scheme_name',
     hwm='TaskScheduler.hwm',
 )
-aliases.update(base_aliases)
+aliases |= base_aliases
 aliases.update(session_aliases)
 
 _db_shortcuts = {
@@ -305,8 +306,8 @@ class IPController(BaseParallelApplication):
 
     @observe('use_threads')
     def _use_threads_changed(self, change):
-        self.mq_class = 'zmq.devices.{}MonitoredQueue'.format(
-            'Thread' if change['new'] else 'Process'
+        self.mq_class = (
+            f"zmq.devices.{'Thread' if change['new'] else 'Process'}MonitoredQueue"
         )
 
     write_connection_files = Bool(
@@ -619,8 +620,7 @@ class IPController(BaseParallelApplication):
             self.log.warning(f"Exhausted {len(self.ports)} common ports")
 
         self._random_port_count += 1
-        port = util.select_random_ports(1)[0]
-        return port
+        return util.select_random_ports(1)[0]
 
     def construct_url(self, kind: str, channel: str, index=None):
         if kind == 'engine':
@@ -745,7 +745,7 @@ class IPController(BaseParallelApplication):
             try:
                 self.load_config_from_json()
             except (AssertionError, OSError) as e:
-                self.log.error("Could not load config from JSON: %s" % e)
+                self.log.error(f"Could not load config from JSON: {e}")
             else:
                 # successfully loaded config from JSON, and reuse=True
                 # no need to write back the same file
@@ -786,7 +786,7 @@ class IPController(BaseParallelApplication):
                 'hb_pong': self.next_port('engine'),
                 BroadcastScheduler.port_name: [
                     self.next_port('engine')
-                    for i in range(self.number_of_leaf_schedulers)
+                    for _ in range(self.number_of_leaf_schedulers)
                 ],
             }
 
@@ -810,8 +810,7 @@ class IPController(BaseParallelApplication):
         broadcast_ids = []  # '0', '00', '01', '001', etc.
         # always a leading 0 for the root node
         for d in range(1, self.broadcast_scheduler_depth + 1):
-            for i in range(2**d):
-                broadcast_ids.append(format(i, f"0{d + 1}b"))
+            broadcast_ids.extend(format(i, f"0{d + 1}b") for i in range(2**d))
         self.internal_info = {
             'interface': internal_interface,
             BroadcastScheduler.port_name: {
@@ -933,16 +932,16 @@ class IPController(BaseParallelApplication):
             }
 
             cdict = {'ssh': self.ssh_server}
-            cdict.update(self.client_info)
+            cdict |= self.client_info
             cdict.update(base)
             self.save_connection_dict(self.client_json_file, cdict)
 
             edict = {'ssh': self.engine_ssh_server}
-            edict.update(self.engine_info)
+            edict |= self.engine_info
             edict.update(base)
             self.save_connection_dict(self.engine_json_file, edict)
 
-        fname = "engines%s.json" % self.cluster_id
+        fname = f"engines{self.cluster_id}.json"
         self.hub.engine_state_file = os.path.join(self.profile_dir.log_dir, fname)
         if self.restore_engines:
             self.hub._load_engine_state()
@@ -1010,8 +1009,8 @@ class IPController(BaseParallelApplication):
                 launch_broadcast_scheduler(**scheduler_args)
 
         def recursively_start_schedulers(identity, depth):
-            outgoing_id1 = identity + '0'
-            outgoing_id2 = identity + '1'
+            outgoing_id1 = f'{identity}0'
+            outgoing_id2 = f'{identity}1'
             is_leaf = depth == self.broadcast_scheduler_depth
             is_root = depth == 0
 
@@ -1155,7 +1154,7 @@ class IPController(BaseParallelApplication):
             self.log.warning("task::using no Task scheduler")
 
         else:
-            self.log.info("task::using Python %s Task scheduler" % scheme)
+            self.log.info(f"task::using Python {scheme} Task scheduler")
             self.launch_python_scheduler(
                 'TaskScheduler',
                 self.get_python_scheduler_args('task', TaskScheduler, monitor_url),
@@ -1206,7 +1205,7 @@ class IPController(BaseParallelApplication):
 
     def forward_logging(self):
         if self.log_url:
-            self.log.info("Forwarding logging to %s" % self.log_url)
+            self.log.info(f"Forwarding logging to {self.log_url}")
             context = zmq.Context.instance()
             lsock = context.socket(zmq.PUB)
             lsock.connect(self.log_url)

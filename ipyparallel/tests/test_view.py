@@ -419,7 +419,7 @@ class TestView(ClusterTestCase):
     def test_abort_all(self):
         """view.abort() aborts all outstanding tasks"""
         view = self.client[-1]
-        ars = [view.apply_async(time.sleep, 0.25) for i in range(10)]
+        ars = [view.apply_async(time.sleep, 0.25) for _ in range(10)]
         view.abort()
         view.wait(timeout=5)
         for ar in ars[5:]:
@@ -452,10 +452,7 @@ class TestView(ClusterTestCase):
         """test executing unicode strings"""
         v = self.client[-1]
         v.block = True
-        if sys.version_info[0] >= 3:
-            code = "a='é'"
-        else:
-            code = "a=u'é'"
+        code = "a='é'" if sys.version_info[0] >= 3 else "a=u'é'"
         v.execute(code)
         assert v['a'] == 'é'
 
@@ -605,7 +602,7 @@ class TestView(ClusterTestCase):
                 if split == ['a', 'int', '5']:
                     found = True
                     break
-            assert found, "whos output wrong: %s" % stdout
+            assert found, f"whos output wrong: {stdout}"
 
     def test_execute_displaypub(self):
         """execute tracks display_pub output"""
@@ -672,10 +669,7 @@ class TestView(ClusterTestCase):
     def test_compositeerror_truncate(self):
         """Truncate CompositeErrors with many exceptions"""
         view = self.client[:]
-        requests = []
-        for i in range(10):
-            requests.append(view.execute("1/0"))
-
+        requests = [view.execute("1/0") for _ in range(10)]
         ar = self.client.get_result(requests)
         try:
             ar.get()

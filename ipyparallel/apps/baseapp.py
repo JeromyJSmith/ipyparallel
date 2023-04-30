@@ -1,6 +1,7 @@
 """
 The Base Application class for ipyparallel apps
 """
+
 import logging
 import os
 import re
@@ -27,11 +28,6 @@ else:
     # don't need CUnicode with traitlets 4
     CUnicode = Unicode
 
-# -----------------------------------------------------------------------------
-# Module errors
-# -----------------------------------------------------------------------------
-
-
 class PIDFileError(Exception):
     pass
 
@@ -40,7 +36,7 @@ class PIDFileError(Exception):
 # Main application
 # -----------------------------------------------------------------------------
 base_aliases = {}
-base_aliases.update(base_ip_aliases)
+base_aliases |= base_ip_aliases
 base_aliases.update(
     {
         'work-dir': 'BaseParallelApplication.work_dir',
@@ -57,7 +53,7 @@ base_flags = {
         "send log output to a file",
     )
 }
-base_flags.update(base_ip_flags)
+base_flags |= base_ip_flags
 
 
 class BaseParallelApplication(BaseIPythonApplication):
@@ -182,7 +178,7 @@ class BaseParallelApplication(BaseIPythonApplication):
         wd = self.work_dir
         if wd != os.getcwd():
             os.chdir(wd)
-            self.log.info("Changing to working dir: %s" % wd)
+            self.log.info(f"Changing to working dir: {wd}")
         # This is the working dir by now.
         sys.path.insert(0, '')
 
